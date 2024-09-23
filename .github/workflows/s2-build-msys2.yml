@@ -276,7 +276,7 @@ jobs:
         echo "## Building ..."
         make -j4 man_MANS=
         echo "## Installing ..."
-        make install man_MANS=
+        make install man_MANS= DESTDIR=
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
@@ -309,7 +309,7 @@ jobs:
         echo "## Building ..."
         make -j4 man_MANS=
         echo "## Installing ..."
-        make install man_MANS=
+        make install man_MANS= DESTDIR=
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
