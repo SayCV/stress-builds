@@ -264,6 +264,9 @@ jobs:
 
         echo "## Configuring ..."
         cflags="-O2"
+        if [ "${{ matrix.job.cxxflags }}" != '' ]; then
+          cflags+=${{ matrix.job.cxxflags }}
+        fi
         cflags+=" -lgcc_s"
         # enable extra warnings
         cflags+=" -Winline"
