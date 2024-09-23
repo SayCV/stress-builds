@@ -220,7 +220,7 @@ jobs:
         version=$(grep '^VERSION=' "$file" | cut -d'=' -f2 | tr -d \" | tr -d ' ')
         # Print the version
         echo "## ${{ env.auxiliaryName }} Version: $version"
-        echo "auxiliaryVer=$version"                > build-pkgs-versions.txt
+        echo "auxiliaryVer=$version"               >> build-pkgs-versions.txt
         echo "auxiliaryCommit=$auxiliaryCommit"    >> build-pkgs-versions.txt
 
     - name: S400 - upload build-pkgs-versions.txt
