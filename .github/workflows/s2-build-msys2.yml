@@ -152,12 +152,20 @@ jobs:
         install_dir=$gh_workspace_mix/install
         config_dir=`realpath --relative-to=$build_dir $source_dir`
         outputs source_dir config_dir build_dir install_dir
+        echo "source_dir=${source_dir}" >> $GITHUB_ENV
+        echo "config_dir=${config_dir}" >> $GITHUB_ENV
+        echo "build_dir=${build_dir}" >> $GITHUB_ENV
+        echo "install_dir=${install_dir}" >> $GITHUB_ENV
 
         aux_source_dir=$gh_workspace_mix/$auxiliaryDir/$auxiliaryName
         aux_build_dir=$gh_workspace_mix/$auxiliaryDir/build
         aux_install_dir=$gh_workspace_mix/install
         aux_config_dir=`realpath --relative-to=$aux_build_dir $aux_source_dir`
         outputs aux_source_dir aux_config_dir aux_build_dir aux_install_dir
+        echo "aux_source_dir=${aux_source_dir}" >> $GITHUB_ENV
+        echo "aux_config_dir=${aux_config_dir}" >> $GITHUB_ENV
+        echo "aux_build_dir=${aux_build_dir}" >> $GITHUB_ENV
+        echo "aux_install_dir=${aux_install_dir}" >> $GITHUB_ENV
 
         # toolchain
         CC='${{ matrix.job.target }}-gcc'
