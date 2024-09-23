@@ -267,6 +267,7 @@ jobs:
         # enable extra warnings
         cflags+=" -Winline"
         CFLAGS="${cflags}" CXXFLAGS="${cflags}" $config_dir/configure \
+          --host=${{ matrix.job.target }} \
           --prefix=$install_dir/stress-${{ steps.versions.outputs.target_arch }} \
           --enable-static \
           --disable-shared
@@ -298,6 +299,7 @@ jobs:
         # enable extra warnings
         cflags+=" -Winline"
         CFLAGS="${cflags}" CXXFLAGS="${cflags}" $aux_config_dir/configure \
+          --host=${{ matrix.job.target }} \
           --prefix=$install_dir/stress-${{ steps.versions.outputs.target_arch }} \
           --enable-static \
           --disable-shared
