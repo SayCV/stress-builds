@@ -300,14 +300,14 @@ jobs:
         cflags+=" -lgcc_s"
         # enable extra warnings
         cflags+=" -Winline"
-        CFLAGS="${cflags}" CXXFLAGS="${cflags}" $aux_config_dir/configure \
-          --host=${{ matrix.job.target }} \
-          --prefix=$install_dir/stress-${{ steps.versions.outputs.target_arch }} \
-          --enable-static \
-          --disable-shared
+        #CFLAGS="${cflags}" CXXFLAGS="${cflags}" $aux_config_dir/configure \
+        #  --host=${{ matrix.job.target }} \
+        #  --prefix=$install_dir/stress-${{ steps.versions.outputs.target_arch }} \
+        #  --enable-static \
+        #  --disable-shared
 
         echo "## Building ..."
-        make -j4 man_MANS=
+        CFLAGS="${cflags}" CXXFLAGS="${cflags}" CC="${CC}" make -j4 man_MANS=
         echo "## Installing ..."
         make install man_MANS= DESTDIR=
       env:
