@@ -1,0 +1,243 @@
+---
+name: "S1 - Detect versions"
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        description: Stringified JSON of job
+        required: true
+        type: string
+      config:
+        description: Stringified JSON of config
+        required: true
+        type: string
+
+jobs:
+  Detect-versions:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(inputs.job) }}
+        config: ${{ fromJSON(inputs.config) }}
+    env:
+      primaryRepoHost: ${{ matrix.config.primary_repo.repo_host }}
+      primaryRepoUser: ${{ matrix.config.primary_repo.repo_user }}
+      primaryRepoName: ${{ matrix.config.primary_repo.repo_name }}
+      primaryName:     ${{ matrix.config.primary_repo.name }}
+      primaryBranch:   ${{ matrix.config.primary_repo.branch }}
+      primaryCommit:   ${{ matrix.config.primary_repo.commit }}
+      primarySparse:   ${{ matrix.config.primary_repo.sparse }}
+      primaryRepo:     ${{ matrix.config.primary_repo.repo_host }}/${{ matrix.config.primary_repo.repo_user }}/${{ matrix.config.primary_repo.repo_name }}
+      primaryApiRepo:  ${{ matrix.config.primary_repo.repo_host }}/api/v1/repos/${{ matrix.config.primary_repo.repo_user }}/${{ matrix.config.primary_repo.repo_name }}
+      primaryDir:      ${{ matrix.config.primary_repo.name }}_${{ matrix.config.primary_repo.commit }}
+      primaryPAT:      ${{ secrets.GITEA_PAT }}
+      auxiliaryRepoHost: ${{ matrix.config.auxiliary_repo.repo_host }}
+      auxiliaryRepoUser: ${{ matrix.config.auxiliary_repo.repo_user }}
+      auxiliaryRepoName: ${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryName:     ${{ matrix.config.auxiliary_repo.name }}
+      auxiliaryBranch:   ${{ matrix.config.auxiliary_repo.branch }}
+      auxiliaryCommit:   ${{ matrix.config.auxiliary_repo.commit }}
+      auxiliarySparse:   ${{ matrix.config.auxiliary_repo.sparse }}
+      auxiliaryRepo:     ${{ matrix.config.auxiliary_repo.repo_host }}/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryApiRepo:  ${{ matrix.config.auxiliary_repo.repo_host }}/api/v1/repos/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryDir:      ${{ matrix.config.auxiliary_repo.name }}_${{ matrix.config.auxiliary_repo.commit }}
+    steps:
+    - name: S100 - Check workflow environments
+      id: check
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        if [ "${{ env.primarySparse }}" == '' ]; then
+          primary_sparse_set=false;
+        else
+          primary_sparse_set=true;
+        fi
+        if [ "${{ env.primaryCommit }}" == '' ]; then
+          primary_commit_set=false;
+        else
+          primary_commit_set=true;
+        fi
+        if [ "${{ env.auxiliarySparse }}" == '' ]; then
+          auxiliary_sparse_set=false;
+        else
+          auxiliary_sparse_set=true;
+        fi
+        if [ "${{ env.auxiliaryCommit }}" == '' ]; then
+          auxiliary_commit_set=false;
+        else
+          auxiliary_commit_set=true;
+        fi
+        outputs primary_sparse_set primary_commit_set auxiliary_sparse_set auxiliary_commit_set
+    - name: S110 - Update workflow environments
+      if: ${{ steps.check.outputs.primary_commit_set != 'true' }}
+      shell: bash
+      run: |
+        set -v
+        escapedSparseDir="$(echo $primarySparse | sed 's;/;%2F;g')"
+        if [ "${{ steps.check.outputs.primary_sparse_set }}" == 'true' ]; then
+          commit=$(curl -X GET -H "Content-Type:application/json" "https://$primaryPAT@$primaryApiRepo/commits?sha=$primaryBranch&path=$escapedSparseDir" | jq -r '.[0].sha')
+        else
+          commit="$(git ls-remote https://$primaryPAT@$primaryRepo --tags $primaryBranch | awk '{print $1;}')";
+        fi
+        echo "primaryCommit=$commit" >> $GITHUB_ENV
+        echo "primaryDir=${primaryName}_${commit}" >> $GITHUB_ENV
+    - name: S110 - Update workflow environments
+      if: ${{ steps.check.outputs.auxiliary_commit_set != 'true' }}
+      shell: bash
+      run: |
+        set -v
+        escapedSparseDir="$(echo $auxiliarySparse | sed 's;/;%2F;g')"
+        if [ "${{ steps.check.outputs.auxiliary_sparse_set }}" == 'true' ]; then
+          commit=$(curl -X GET -H "Content-Type:application/json" "https://$auxiliaryPAT@$auxiliaryApiRepo/commits?sha=$auxiliaryBranch&path=$escapedSparseDir" | jq -r '.[0].sha')
+        else
+          commit="$(git ls-remote https://$auxiliaryPAT@$auxiliaryRepo --tags $auxiliaryBranch | awk '{print $1;}')";
+        fi
+        echo "auxiliaryCommit=$commit" >> $GITHUB_ENV
+        echo "auxiliaryDir=${auxiliaryName}_${commit}" >> $GITHUB_ENV
+    - name: S120 - Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        ## DIRs setup
+        source_dir=$GITHUB_WORKSPACE/$primaryDir
+        build_dir=$GITHUB_WORKSPACE/build
+        install_dir=$GITHUB_WORKSPACE/install
+        config_dir=`realpath --relative-to=$build_dir $source_dir`
+        outputs source_dir config_dir build_dir install_dir
+    - name: S130 - Create all needed build/work directories
+      shell: bash
+      run: |
+        ## Create build/work space
+        mkdir -p $primaryDir
+        mkdir -p $auxiliaryDir
+        pwd && ls
+    - name: S140 - Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+
+    - name: S200 - Restore ${{ env.primaryName }} source cache if available
+      id: primary-source-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.primaryName }}-source.tar
+        key: ${{ env.primaryName }}-source-${{ env.primaryCommit }}
+    - name: S200 - Restore ${{ env.auxiliaryName }} source cache if available
+      id: auxiliary-source-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.auxiliaryName }}-source.tar
+        key: ${{ env.auxiliaryName }}-source-${{ env.auxiliaryCommit }}
+    - name: S210 - Clone ${{ env.primaryName }} source => (${{ env.primaryDir }})
+      if: ${{ steps.primary-source-cache.outputs.cache-hit != 'true' }}
+      working-directory: ${{ github.workspace }}/${{ env.primaryDir }}
+      run: |
+        set -v
+        ## cd $primaryDir
+        rm -vrf $primaryName || true
+        if [ "${{ steps.check.outputs.primary_sparse_set }}" == 'true' ]; then
+          git clone --filter=blob:none --no-checkout --depth 1 --sparse --branch $primaryBranch https://$primaryPAT@$primaryRepo $primaryName;
+          cd $primaryName;
+          git sparse-checkout add $primarySparse;
+          git checkout;
+        else
+          git clone --recursive --branch $primaryBranch https://$primaryPAT@$primaryRepo $primaryName --depth=1;
+        fi
+        pwd
+    - name: S210 - Clone ${{ env.auxiliaryName }} source => (${{ env.auxiliaryDir }})
+      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
+      working-directory: ${{ github.workspace }}/${{ env.auxiliaryDir }}
+      run: |
+        set -v
+        ## cd $auxiliaryDir
+        rm -vrf $auxiliaryName || true
+        if [ "${{ steps.check.outputs.auxiliary_sparse_set }}" == 'true' ]; then
+          git clone --filter=blob:none --no-checkout --depth 1 --sparse --branch $auxiliaryBranch https://$auxiliaryPAT@$auxiliaryRepo $auxiliaryName;
+          cd $auxiliaryName;
+          git sparse-checkout add $auxiliarySparse;
+          git checkout;
+        else
+          git clone --recursive --branch $auxiliaryBranch https://$auxiliaryPAT@$auxiliaryRepo $auxiliaryName --depth=1;
+        fi
+        pwd
+    - name: S220 - Archive ${{ env.primaryName }} source
+      if: ${{ steps.primary-source-cache.outputs.cache-hit != 'true' }}
+      run: |
+        uname -a
+        tar -cf ${{ env.primaryName }}-source.tar ${{ env.primaryDir }}
+    - name: S220 - Archive ${{ env.primaryName }} source
+      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
+      run: |
+        uname -a
+        tar -cf ${{ env.auxiliaryName }}-source.tar ${{ env.auxiliaryDir }}
+    - name: S230 - Extract ${{ env.primaryName }}-source.tar
+      if: ${{ steps.primary-source-cache.outputs.cache-hit == 'true' }}
+      run: |
+        tar -xvf ${{ env.primaryName }}-source.tar
+    - name: S230 - Extract ${{ env.auxiliaryName }}-source.tar
+      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit == 'true' }}
+      run: |
+        tar -xvf ${{ env.auxiliaryName }}-source.tar
+
+    - name: S300 - Parse versions
+      shell: bash
+      run: |
+        # The target triplet
+        triplet="${{ matrix.job.target }}"
+        # Split into architecture, vendor, and OS-ABI
+        IFS='-' read -r arch vendor os abi <<< $(echo "$triplet" | sed 's/\(.*-\)\(.*\)-/\1\2-/')
+        # Output the parsed values
+        echo "Architecture: $arch"
+        echo "Vendor: $vendor"
+        echo "Operating System: $os"
+        echo "ABI: $abi"
+
+        # Path to the version file
+        file="$primaryDir/$primaryName/configure"
+        # Extract the major, minor, and patch version number
+        # Combine the values into a version string
+        version=$(grep '^PACKAGE_VERSION=' "$file" | cut -d'=' -f2 | cut -d'_' -f1 | tr -d \' | tr -d ' ')
+        # Print the version
+        echo "## ${{ env.primaryName }} Version: $version"
+
+        echo "primaryVer=$version"                > build-pkgs-versions.txt
+        echo "primaryCommit=$primaryCommit"      >> build-pkgs-versions.txt
+        echo "target_arch=$arch"                 >> build-pkgs-versions.txt
+        echo "target_vendor=$vendor"             >> build-pkgs-versions.txt
+        echo "target_os=$os"                     >> build-pkgs-versions.txt
+        echo "target_abi=$abi"                   >> build-pkgs-versions.txt
+
+        # Path to the version file
+        file="$auxiliaryDir/$auxiliaryName/Makefile"
+        # Extract the major, minor, and patch version number
+        # Combine the values into a version string
+        version=$(grep '^VERSION=' "$file" | cut -d'=' -f2 | tr -d \" | tr -d ' ')
+        # Print the version
+        echo "## ${{ env.auxiliaryName }} Version: $version"
+        echo "auxiliaryVer=$version"                > build-pkgs-versions.txt
+        echo "auxiliaryCommit=$auxiliaryCommit"    >> build-pkgs-versions.txt
+
+    - name: S400 - upload build-pkgs-versions.txt
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-pkgs-versions-${{ env.primaryCommit }}-${{ env.auxiliaryCommit }}.txt
+        path: ${{ github.workspace }}/build-pkgs-versions.txt
+      if: ${{ always() }}
+    - name: S410 - upload ${{ env.primaryName }}-source.tar
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.primaryName }}-source-${{ env.primaryCommit }}
+        path: ${{ env.primaryName }}-source.tar
+      if: ${{ always() }}
+    - name: S410 - upload ${{ env.auxiliaryName }}-source.tar
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.auxiliaryName }}-source-${{ env.auxiliaryCommit }}
+        path: ${{ env.auxiliaryName }}-source.tar
+      if: ${{ always() }}

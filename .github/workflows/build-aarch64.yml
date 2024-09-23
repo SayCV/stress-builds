@@ -1,0 +1,132 @@
+---
+name: "Build aarch64"
+
+env:
+  JOB: >-
+    [
+      {
+        "os": "windows-2022",
+        "msys2_sys": "MSYS",
+        "target": "aarch64-unknown-linux-gnu",
+        "skip-tests": true
+      }
+    ]
+  CONFIGURATION: "config.json"
+
+on:
+  push:
+    tags:
+      - "v*-rev*"
+  workflow_dispatch:
+
+jobs:
+  Get-config:
+    runs-on: ubuntu-latest
+    outputs:
+      job: ${{ steps.generate-matrix.outputs.job }}
+      config: ${{ steps.generate-matrix.outputs.config }}
+    steps:
+    - name: "😄 Checkout"
+      uses: actions/checkout@v4
+
+    - name: "😆 Generate Matrix"
+      id: generate-matrix
+      run: |
+        echo "config<<EOF" >> $GITHUB_OUTPUT
+        cat  ${{ env.CONFIGURATION }} >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "job=$(jq -r -c . <<< "$JOB")" >> $GITHUB_OUTPUT
+
+  Detect-versions:
+    needs: [Get-config, ]
+    uses: ./.github/workflows/s1-detect-versions.yml
+    secrets: inherit
+    with:
+      job: "${{ needs.Get-config.outputs.job }}"
+      config: "${{ needs.Get-config.outputs.config }}"
+
+  Build-target:
+    needs: [Get-config, Detect-versions]
+    uses: ./.github/workflows/s2-build-msys2.yml
+    secrets: inherit
+    with:
+      job: "${{ needs.Get-config.outputs.job }}"
+      config: "${{ needs.Get-config.outputs.config }}"
+
+  Release:
+    needs: [Get-config, Detect-versions, Build-target]
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.Get-config.outputs.job) }}
+        config: ${{ fromJSON(needs.Get-config.outputs.config) }}
+    env:
+      primaryRepoHost: ${{ matrix.config.primary_repo.repo_host }}
+      primaryRepoUser: ${{ matrix.config.primary_repo.repo_user }}
+      primaryRepoName: ${{ matrix.config.primary_repo.repo_name }}
+      primaryName:     ${{ matrix.config.primary_repo.name }}
+      primaryBranch:   ${{ matrix.config.primary_repo.branch }}
+      primaryCommit:   ${{ matrix.config.primary_repo.commit }}
+      primarySparse:   ${{ matrix.config.primary_repo.sparse }}
+      primaryRepo:     ${{ matrix.config.primary_repo.repo_host }}/${{ matrix.config.primary_repo.repo_user }}/${{ matrix.config.primary_repo.repo_name }}
+      primaryApiRepo:  ${{ matrix.config.primary_repo.repo_host }}/api/v1/repos/${{ matrix.config.primary_repo.repo_user }}/${{ matrix.config.primary_repo.repo_name }}
+      primaryDir:      ${{ matrix.config.primary_repo.name }}_${{ matrix.config.primary_repo.commit }}
+      primaryPAT:      ${{ secrets.GITEA_PAT }}
+      auxiliaryRepoHost: ${{ matrix.config.auxiliary_repo.repo_host }}
+      auxiliaryRepoUser: ${{ matrix.config.auxiliary_repo.repo_user }}
+      auxiliaryRepoName: ${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryName:     ${{ matrix.config.auxiliary_repo.name }}
+      auxiliaryBranch:   ${{ matrix.config.auxiliary_repo.branch }}
+      auxiliaryCommit:   ${{ matrix.config.auxiliary_repo.commit }}
+      auxiliarySparse:   ${{ matrix.config.auxiliary_repo.sparse }}
+      auxiliaryRepo:     ${{ matrix.config.auxiliary_repo.repo_host }}/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryApiRepo:  ${{ matrix.config.auxiliary_repo.repo_host }}/api/v1/repos/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
+      auxiliaryDir:      ${{ matrix.config.auxiliary_repo.name }}_${{ matrix.config.auxiliary_repo.commit }}
+    outputs:
+      arch:   ${{ steps.parse-build-pkgs-versions.outputs.arch }}
+      releaseTag: ${{ steps.parse-build-pkgs-versions.outputs.releaseTag }}
+    permissions:
+      contents: write
+    steps:
+    - name: S900 - Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+    - name: S910 - Display structure of downloaded files
+      run: |
+        ls -R
+
+    - name: S920 - Parse build-pkgs-versions
+      id: parse-build-pkgs-versions
+      run: |
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        source build-pkgs-versions.txt
+        target_arch=$target_arch
+        primaryVer=$primaryVer
+        auxiliaryVer=$auxiliaryVer
+        releaseTag=v$primaryVer-$auxiliaryVer
+        outputs releaseTag primaryVer auxiliaryVer target_arch
+
+        echo "$primaryName $primaryVer"      > ${{ github.workspace }}-VERSIONS.txt
+        echo "$auxiliaryName $auxiliaryVer" >> ${{ github.workspace }}-VERSIONS.txt
+
+    - name: S930 - Generate Hashes
+      run: |
+        echo "md5sum	"`md5sum -t $hash_file`         > $hash_file.hash
+        echo "sha1sum	"`sha1sum -t $hash_file`       >> $hash_file.hash
+        echo "sha256sum	"`sha256sum -t $hash_file`   >> $hash_file.hash
+        echo "sha512sum 	"`sha512sum -t $hash_file` >> $hash_file.hash
+      env:
+        hash_file: stress-${{ steps.parse-build-pkgs-versions.outputs.target_arch }}.tar.gz
+
+    - name: S940 - Upload to Release
+      id: upload_to_release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.parse-build-pkgs-versions.outputs.releaseTag }}
+        body_path: ${{ github.workspace }}-VERSIONS.txt
+        files: |
+          *.tar.gz
+          *.hash

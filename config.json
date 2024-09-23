@@ -1,0 +1,23 @@
+[
+    {
+        "##comment": "spell-checker: ignore (abbrev/names) ",
+        "primary_repo": {
+            "name": "stressapptest",
+            "repo_host": "github.com",
+            "repo_user": "stressapptest",
+            "repo_name": "stressapptest",
+            "branch": "master",
+            "commit": "73b9df227e89cd52b09852056843610722b7b7ae",
+            "sparse": ""
+        },
+        "auxiliary_repo": {
+            "name": "stress-ng",
+            "repo_host": "github.com",
+            "repo_user": "ColinIanKing",
+            "repo_name": "stress-ng",
+            "branch": "master",
+            "commit": "c7e1a098ab0672117b1904cf435d52489558bf95",
+            "sparse": ""
+        }
+    }
+]
