@@ -180,6 +180,39 @@ jobs:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
 
+    - name: S180 - Find cross toolchain
+      uses: oprypin/find-latest-tag@v1
+      with:
+        repository: '${{ github.repository_owner }}/crosstool-ng-msys2-builds'
+        releases-only: true
+      id: toolchain-find-latest-tag
+    - name: S182 - Download cross toolchain
+      uses: robinraju/release-downloader@v1
+      with:
+        repository: '${{ github.repository_owner }}/crosstool-ng-msys2-builds'
+        latest: true
+        # tag: ''
+        fileName: '${{ matrix.job.target }}-msys2.windows-2022.tar.gz'
+        tarBall: false
+        zipBall: false
+        #token: ${{ secrets.GITHUB_TOKEN }}
+    - name: S184 - Extract cross toolchain
+      shell: msys2 {0}
+      run: |
+        mkdir -p .local
+        if [ "${{ matrix.job.target }}" == 'x86_64-unknown-linux-musl' ]; then
+          echo "## Extract x86_64-unknown-linux-gnu-msys2.windows-2022.tar.gz"
+          tar -xf x86_64-unknown-linux-gnu-msys2.windows-2022.tar.gz -C .local
+        else
+          tar -xf ${{ matrix.job.target }}-msys2.windows-2022.tar.gz -C .local
+        fi
+      env:
+        MSYS_NO_PATHCONV:
+        MSYS: winsymlinks:native
+    - name: S186 - Update PATH for cross toolchain
+      shell: msys2 {0}
+      run: echo "$GITHUB_WORKSPACE/.local/bin" >> "$GITHUB_PATH"
+
     - name: S210 - Extract primary source
       shell: msys2 {0}
       continue-on-error: false
@@ -195,7 +228,6 @@ jobs:
       shell: msys2 {0}
       run: |
         ## Info
-        cd $GITHUB_WORKSPACE/$primaryDir/rkutils/$primarySparse
         # commit info
         echo "## commit"
         # environment
