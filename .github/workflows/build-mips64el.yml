@@ -9,7 +9,7 @@ env:
         "msys2_sys": "MSYS",
         "target": "mips64el-unknown-linux-gnu",
         "skip-tests": true,
-        "cxxflags": "-march=mips64"
+        "cxxflags": "-march=mips64r2"
       }
     ]
   CONFIGURATION: "config.json"
