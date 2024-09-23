@@ -293,7 +293,7 @@ jobs:
         cd $aux_source_dir
         echo "## Bootstraping ..."
         # ./bootstrap.sh
-        cd $aux_build_dir
+        cd $aux_source_dir
 
         echo "## Configuring ..."
         cflags="-O2"
