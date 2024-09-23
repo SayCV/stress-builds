@@ -247,7 +247,7 @@ jobs:
         which $CC >/dev/null 2>&1 && ($CC --version | head -1) || true
         which $CXX >/dev/null 2>&1 && ($CXX --version | head -1) || true
 
-    - name: S400 - Build $primaryName
+    - name: S400 - Build ${{ env.primaryName }}
       shell: msys2 {0}
       run: |
         echo "## source_dir=$source_dir"
@@ -278,7 +278,7 @@ jobs:
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
-    - name: S401 - Build $auxiliaryName
+    - name: S401 - Build ${{ env.auxiliaryName }}
       shell: msys2 {0}
       run: |
         echo "## aux_source_dir=$aux_source_dir"
@@ -327,6 +327,10 @@ jobs:
       shell: msys2 {0}
       run: |
         ## Archive artifacts
+        tar \
+            -czf $gh_workspace_nix/stress-${{ steps.versions.outputs.target_arch }}-buildlog.tar.gz \
+            $build_dir/*.log $aux_build_dir/*.log \
+            || true
       if: ${{ always() }}
     - name: S520 - Upload executable artifacts / stress-${{ steps.versions.outputs.target_arch }}
       uses: actions/upload-artifact@v4
