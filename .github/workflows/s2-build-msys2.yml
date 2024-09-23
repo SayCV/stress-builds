@@ -264,6 +264,7 @@ jobs:
 
         echo "## Configuring ..."
         cflags="-O2"
+        cflags+=" -lgcc_s"
         # enable extra warnings
         cflags+=" -Winline"
         CFLAGS="${cflags}" CXXFLAGS="${cflags}" $config_dir/configure \
@@ -296,6 +297,7 @@ jobs:
 
         echo "## Configuring ..."
         cflags="-O2"
+        cflags+=" -lgcc_s"
         # enable extra warnings
         cflags+=" -Winline"
         CFLAGS="${cflags}" CXXFLAGS="${cflags}" $aux_config_dir/configure \
