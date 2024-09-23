@@ -309,7 +309,7 @@ jobs:
         echo "## Building ..."
         CFLAGS="${cflags}" CXXFLAGS="${cflags}" CC="${CC}" make -j4 man_MANS=
         echo "## Installing ..."
-        make install man_MANS= DESTDIR=
+        make install man_MANS= DESTDIR=$install_dir/stress-${{ steps.versions.outputs.target_arch }}
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
