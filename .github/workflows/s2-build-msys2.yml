@@ -142,8 +142,13 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # DIRs setup
-        gh_workspace_nix="$(cygpath -u '${{ github.workspace }}')"
-        gh_workspace_mix="$(cygpath -m '${{ github.workspace }}')"
+        if [ "${{ runner.os }}" == 'Windows' ]; then
+          gh_workspace_nix="$(cygpath -u '${{ github.workspace }}')"
+          gh_workspace_mix="$(cygpath -m '${{ github.workspace }}')"
+        else
+          gh_workspace_nix="${{ github.workspace }}"
+          gh_workspace_mix="${{ github.workspace }}"
+        fi
         echo "gh_workspace_nix=${gh_workspace_nix}" >> $GITHUB_ENV
         echo "gh_workspace_mix=${gh_workspace_mix}" >> $GITHUB_ENV
 
