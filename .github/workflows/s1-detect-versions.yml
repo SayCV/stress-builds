@@ -44,8 +44,10 @@ jobs:
       auxiliaryRepo:     ${{ matrix.config.auxiliary_repo.repo_host }}/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryApiRepo:  ${{ matrix.config.auxiliary_repo.repo_host }}/api/v1/repos/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryDir:      ${{ matrix.config.auxiliary_repo.name }}_${{ matrix.config.auxiliary_repo.commit }}
+      auxiliaryPAT:      ${{ secrets.GITEA_PAT }}
+      inter_ver_file:            ${{ matrix.config.inter_ver_file }}
     steps:
-    - name: S100 - Check workflow environments
+    - name: S200 - Check workflow environments
       id: check
       shell: bash
       run: |
@@ -72,7 +74,7 @@ jobs:
           auxiliary_commit_set=true;
         fi
         outputs primary_sparse_set primary_commit_set auxiliary_sparse_set auxiliary_commit_set
-    - name: S110 - Update workflow environments
+    - name: S210 - Update workflow environments
       if: ${{ steps.check.outputs.primary_commit_set != 'true' }}
       shell: bash
       run: |
@@ -85,8 +87,8 @@ jobs:
         fi
         echo "primaryCommit=$commit" >> $GITHUB_ENV
         echo "primaryDir=${primaryName}_${commit}" >> $GITHUB_ENV
-    - name: S110 - Update workflow environments
-      if: ${{ steps.check.outputs.auxiliary_commit_set != 'true' }}
+    - name: S211 - Update workflow environments
+      if: ${{ env.auxiliaryName != '' && steps.check.outputs.auxiliary_commit_set != 'true' }}
       shell: bash
       run: |
         set -v
@@ -98,43 +100,69 @@ jobs:
         fi
         echo "auxiliaryCommit=$commit" >> $GITHUB_ENV
         echo "auxiliaryDir=${auxiliaryName}_${commit}" >> $GITHUB_ENV
-    - name: S120 - Initialize workflow variables
+    - name: S220 - Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         ## DIRs setup
-        source_dir=$GITHUB_WORKSPACE/$primaryDir
-        build_dir=$GITHUB_WORKSPACE/build
-        install_dir=$GITHUB_WORKSPACE/install
-        config_dir=`realpath --relative-to=$build_dir $source_dir`
-        outputs source_dir config_dir build_dir install_dir
-    - name: S130 - Create all needed build/work directories
+        if [ "${{ runner.os }}" == 'Windows' ]; then
+          gh_workspace_nix="$(cygpath -u '${{ github.workspace }}')"
+          gh_workspace_mix="$(cygpath -m '${{ github.workspace }}')"
+        else
+          gh_workspace_nix="${{ github.workspace }}"
+          gh_workspace_mix="${{ github.workspace }}"
+        fi
+        echo "gh_workspace_nix=${gh_workspace_nix}" >> $GITHUB_ENV
+        echo "gh_workspace_mix=${gh_workspace_mix}" >> $GITHUB_ENV
+
+        source_dir=$gh_workspace_mix/$primaryDir/$primaryName
+        build_dir=$gh_workspace_mix/$primaryDir/build
+        build_dir=$source_dir
+        install_dir=$gh_workspace_mix/install
+
+        outputs source_dir build_dir install_dir
+        echo "source_dir=${source_dir}" >> $GITHUB_ENV
+        echo "build_dir=${build_dir}" >> $GITHUB_ENV
+        echo "install_dir=${install_dir}" >> $GITHUB_ENV
+
+        if [ "${{ env.auxiliaryName }}" != '' ]; then
+          aux_source_dir=$gh_workspace_mix/$auxiliaryDir/$auxiliaryName
+          aux_build_dir=$gh_workspace_mix/$auxiliaryDir/build
+          aux_build_dir=$aux_source_dir
+          aux_install_dir=$gh_workspace_mix/install
+
+          outputs aux_source_dir aux_build_dir aux_install_dir
+          echo "aux_source_dir=${aux_source_dir}" >> $GITHUB_ENV
+          echo "aux_build_dir=${aux_build_dir}" >> $GITHUB_ENV
+          echo "aux_install_dir=${aux_install_dir}" >> $GITHUB_ENV
+        fi
+    - name: S230 - Create workflow directories
       shell: bash
       run: |
         ## Create build/work space
-        mkdir -p $primaryDir
-        mkdir -p $auxiliaryDir
+        [ -z $primaryDir ] || mkdir -p $primaryDir
+        [ -z $auxiliaryDir ] || mkdir -p $auxiliaryDir
         pwd && ls
-    - name: S140 - Install/setup prerequisites
+    - name: S240 - Install workflow prerequisites
       shell: bash
       run: |
         ## Install/setup prerequisites
 
-    - name: S200 - Restore ${{ env.primaryName }} source cache if available
+    - name: S300 - Restore primary source
       id: primary-source-cache
       uses: actions/cache@v4
       with:
         path: ${{ env.primaryName }}-source.tar
         key: ${{ env.primaryName }}-source-${{ env.primaryCommit }}
-    - name: S200 - Restore ${{ env.auxiliaryName }} source cache if available
+    - name: S301 - Restore auxiliary source
       id: auxiliary-source-cache
       uses: actions/cache@v4
       with:
         path: ${{ env.auxiliaryName }}-source.tar
         key: ${{ env.auxiliaryName }}-source-${{ env.auxiliaryCommit }}
-    - name: S210 - Clone ${{ env.primaryName }} source => (${{ env.primaryDir }})
+    - name: S310 - Clone primary source
       if: ${{ steps.primary-source-cache.outputs.cache-hit != 'true' }}
       working-directory: ${{ github.workspace }}/${{ env.primaryDir }}
       run: |
@@ -150,8 +178,8 @@ jobs:
           git clone --recursive --branch $primaryBranch https://$primaryPAT@$primaryRepo $primaryName --depth=1;
         fi
         pwd
-    - name: S210 - Clone ${{ env.auxiliaryName }} source => (${{ env.auxiliaryDir }})
-      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
+    - name: S311 - Clone auxiliary source
+      if: ${{ env.auxiliaryName != '' && steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
       working-directory: ${{ github.workspace }}/${{ env.auxiliaryDir }}
       run: |
         set -v
@@ -166,26 +194,26 @@ jobs:
           git clone --recursive --branch $auxiliaryBranch https://$auxiliaryPAT@$auxiliaryRepo $auxiliaryName --depth=1;
         fi
         pwd
-    - name: S220 - Archive ${{ env.primaryName }} source
+    - name: S320 - Archive primary source
       if: ${{ steps.primary-source-cache.outputs.cache-hit != 'true' }}
       run: |
         uname -a
         tar -cf ${{ env.primaryName }}-source.tar ${{ env.primaryDir }}
-    - name: S220 - Archive ${{ env.primaryName }} source
-      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
+    - name: S321 - Archive auxiliary source
+      if: ${{ env.auxiliaryName != '' && steps.auxiliary-source-cache.outputs.cache-hit != 'true' }}
       run: |
         uname -a
         tar -cf ${{ env.auxiliaryName }}-source.tar ${{ env.auxiliaryDir }}
-    - name: S230 - Extract ${{ env.primaryName }}-source.tar
+    - name: S330 - Extract primary source tarball
       if: ${{ steps.primary-source-cache.outputs.cache-hit == 'true' }}
       run: |
         tar -xvf ${{ env.primaryName }}-source.tar
-    - name: S230 - Extract ${{ env.auxiliaryName }}-source.tar
-      if: ${{ steps.auxiliary-source-cache.outputs.cache-hit == 'true' }}
+    - name: S331 - Extract auxiliary source tarball
+      if: ${{ env.auxiliaryName != '' && steps.auxiliary-source-cache.outputs.cache-hit == 'true' }}
       run: |
         tar -xvf ${{ env.auxiliaryName }}-source.tar
 
-    - name: S300 - Parse versions
+    - name: S400 - Parse source versions
       shell: bash
       run: |
         # The target triplet
@@ -200,44 +228,53 @@ jobs:
 
         # Path to the version file
         file="$primaryDir/$primaryName/configure"
-        # Extract the major, minor, and patch version number
+        # Extract the major, minor, and patch version numbers
+        major=$(grep '^major=' "$file" | cut -d'=' -f2)
+        minor=$(grep '^minor=' "$file" | cut -d'=' -f2)
+        patch=$(grep '^patch=' "$file" | cut -d'=' -f2)
         # Combine the values into a version string
+        version="$major$minor-$patch"
         version=$(grep '^PACKAGE_VERSION=' "$file" | cut -d'=' -f2 | cut -d'_' -f1 | tr -d \' | tr -d ' ')
         # Print the version
         echo "## ${{ env.primaryName }} Version: $version"
 
-        echo "primaryVer=$version"                > build-pkgs-versions.txt
-        echo "primaryCommit=$primaryCommit"      >> build-pkgs-versions.txt
-        echo "target_arch=$arch"                 >> build-pkgs-versions.txt
-        echo "target_vendor=$vendor"             >> build-pkgs-versions.txt
-        echo "target_os=$os"                     >> build-pkgs-versions.txt
-        echo "target_abi=$abi"                   >> build-pkgs-versions.txt
+        [ -z $inter_ver_file ] || inter_ver_file="inter_ver_file.txt"
+        echo "primaryVer=$version"                > $inter_ver_file
+        echo "primaryCommit=$primaryCommit"      >> $inter_ver_file
+        echo "target_arch=$arch"                 >> $inter_ver_file
+        echo "target_vendor=$vendor"             >> $inter_ver_file
+        echo "target_os=$os"                     >> $inter_ver_file
+        echo "target_abi=$abi"                   >> $inter_ver_file
 
-        # Path to the version file
-        file="$auxiliaryDir/$auxiliaryName/Makefile"
-        # Extract the major, minor, and patch version number
-        # Combine the values into a version string
-        version=$(grep '^VERSION=' "$file" | cut -d'=' -f2 | tr -d \" | tr -d ' ')
-        # Print the version
-        echo "## ${{ env.auxiliaryName }} Version: $version"
-        echo "auxiliaryVer=$version"               >> build-pkgs-versions.txt
-        echo "auxiliaryCommit=$auxiliaryCommit"    >> build-pkgs-versions.txt
+        if [ "${{ env.auxiliaryName }}" != '' ]; then
+          # Path to the version file
+          file="$auxiliaryDir/$auxiliaryName/Makefile";
+          major=$(grep '^major=' "$file" | cut -d'=' -f2);
+          minor=$(grep '^minor=' "$file" | cut -d'=' -f2);
+          patch=$(grep '^patch=' "$file" | cut -d'=' -f2);
+          # Combine the values into a version string
+          version="$major$minor-$patch";
+          version=$(grep '^VERSION=' "$file" | cut -d'=' -f2 | tr -d \" | tr -d ' ');
+          echo "## ${{ env.auxiliaryName }} Version: $version";
+          echo "auxiliaryVer=$version"               >> $inter_ver_file;
+          echo "auxiliaryCommit=$auxiliaryCommit"    >> $inter_ver_file;
+        fi
 
-    - name: S400 - upload build-pkgs-versions.txt
+    - name: S800 - Upload versions artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-pkgs-versions-${{ env.primaryCommit }}-${{ env.auxiliaryCommit }}.txt
-        path: ${{ github.workspace }}/build-pkgs-versions.txt
+        name: ${{ env.inter_ver_file }}
+        path: ${{ github.workspace }}/${{ env.inter_ver_file }}
       if: ${{ always() }}
-    - name: S410 - upload ${{ env.primaryName }}-source.tar
+    - name: S810 - Upload primary source artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.primaryName }}-source-${{ env.primaryCommit }}
         path: ${{ env.primaryName }}-source.tar
       if: ${{ always() }}
-    - name: S410 - upload ${{ env.auxiliaryName }}-source.tar
+    - name: S811 - Upload auxiliary source artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.auxiliaryName }}-source-${{ env.auxiliaryCommit }}
         path: ${{ env.auxiliaryName }}-source.tar
-      if: ${{ always() }}
+      if: ${{ env.auxiliaryName != '' }}

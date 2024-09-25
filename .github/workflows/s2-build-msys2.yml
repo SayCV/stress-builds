@@ -44,8 +44,15 @@ jobs:
       auxiliaryRepo:     ${{ matrix.config.auxiliary_repo.repo_host }}/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryApiRepo:  ${{ matrix.config.auxiliary_repo.repo_host }}/api/v1/repos/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryDir:      ${{ matrix.config.auxiliary_repo.name }}_${{ matrix.config.auxiliary_repo.commit }}
+      auxiliaryPAT:      ${{ secrets.GITEA_PAT }}
+      inter_ver_file:            ${{ matrix.config.inter_ver_file }}
     steps:
-    - name: S100 - Install/setup msys2
+    - name: S100 - Download workflow artifacts
+      uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+    - name: S110 - Install msys2 environments
+      if: ${{ always() }}
       uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.job.msys2_sys }}
@@ -54,38 +61,23 @@ jobs:
           base-devel msys2-runtime-devel autotools intltool libtool gcc bison flex gperf help2man meson ninja texinfo patch unzip
           autoconf-archive gettext-devel ncurses-devel rsync
         path-type: inherit
-    - name: S110 - Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        merge-multiple: true
-    - name: S120 - Parse build-pkgs-versions
+    - name: S120 - Parse workflow versions
       id: versions
       shell: msys2 {0}
       run: |
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        source build-pkgs-versions.txt
+        source ${{ env.inter_ver_file }}
         outputs primaryVer auxiliaryVer target_arch target_vendor target_os target_abi
         echo "primaryCommit=$primaryCommit" >> $GITHUB_ENV
         echo "primaryDir=${primaryName}_${primaryCommit}" >> $GITHUB_ENV
         echo "auxiliaryCommit=$auxiliaryCommit" >> $GITHUB_ENV
         echo "auxiliaryDir=${auxiliaryName}_${auxiliaryCommit}" >> $GITHUB_ENV
         ls
-    - name: S130 - Check workflow environments
+
+    - name: S200 - Check workflow environments
       id: check
       shell: msys2 {0}
       run: |
-        ## Git setup
-        git config --global core.autocrlf input
-        ## Workdir setup
-        workdir=$primaryDir
-        rm -vrf $workdir || true
-        mkdir -p $workdir
-        fsutil file SetCaseSensitiveInfo $workdir enable
-        ## Workdir setup
-        workdir=$auxiliaryDir
-        rm -vrf $workdir || true
-        mkdir -p $workdir
-        fsutil file SetCaseSensitiveInfo $workdir enable
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         if [ "${{ env.primarySparse }}" == '' ]; then
@@ -109,7 +101,7 @@ jobs:
           auxiliary_commit_set=true;
         fi
         outputs primary_sparse_set primary_commit_set auxiliary_sparse_set auxiliary_commit_set
-    - name: S140 - Update workflow environments
+    - name: S210 - Update workflow environments
       if: ${{ steps.check.outputs.primary_commit_set != 'true' }}
       shell: msys2 {0}
       run: |
@@ -121,9 +113,9 @@ jobs:
           commit="$(git ls-remote https://$primaryPAT@$primaryRepo --tags $primaryBranch | awk '{print $1;}')";
         fi
         echo "primaryCommit=$commit" >> $GITHUB_ENV
-        echo "primaryDir=${primaryName}_${primaryCommit}" >> $GITHUB_ENV
-    - name: S140 - Update workflow environments
-      if: ${{ steps.check.outputs.auxiliary_commit_set != 'true' }}
+        echo "primaryDir=${primaryName}_${commit}" >> $GITHUB_ENV
+    - name: S211 - Update workflow environments
+      if: ${{ env.auxiliaryName != '' && steps.check.outputs.auxiliary_commit_set != 'true' }}
       shell: msys2 {0}
       run: |
         set -v
@@ -135,13 +127,13 @@ jobs:
         fi
         echo "auxiliaryCommit=$commit" >> $GITHUB_ENV
         echo "auxiliaryDir=${auxiliaryName}_${commit}" >> $GITHUB_ENV
-    - name: S150 - Initialize workflow variables
+    - name: S220 - Initialize workflow variables
       id: vars
       shell: msys2 {0}
       run: |
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # DIRs setup
+        ## DIRs setup
         if [ "${{ runner.os }}" == 'Windows' ]; then
           gh_workspace_nix="$(cygpath -u '${{ github.workspace }}')"
           gh_workspace_mix="$(cygpath -m '${{ github.workspace }}')"
@@ -152,25 +144,27 @@ jobs:
         echo "gh_workspace_nix=${gh_workspace_nix}" >> $GITHUB_ENV
         echo "gh_workspace_mix=${gh_workspace_mix}" >> $GITHUB_ENV
 
-        source_dir=$gh_workspace_mix/$primaryDir/$primaryName
+        source_dir=$gh_workspace_mix/$primaryDir/$primaryName/$primarySparse
         build_dir=$gh_workspace_mix/$primaryDir/build
+        build_dir=$source_dir
         install_dir=$gh_workspace_mix/install
-        config_dir=`realpath --relative-to=$build_dir $source_dir`
-        outputs source_dir config_dir build_dir install_dir
+
+        outputs source_dir build_dir install_dir
         echo "source_dir=${source_dir}" >> $GITHUB_ENV
-        echo "config_dir=${config_dir}" >> $GITHUB_ENV
         echo "build_dir=${build_dir}" >> $GITHUB_ENV
         echo "install_dir=${install_dir}" >> $GITHUB_ENV
 
-        aux_source_dir=$gh_workspace_mix/$auxiliaryDir/$auxiliaryName
-        aux_build_dir=$gh_workspace_mix/$auxiliaryDir/build
-        aux_install_dir=$gh_workspace_mix/install
-        aux_config_dir=`realpath --relative-to=$aux_build_dir $aux_source_dir`
-        outputs aux_source_dir aux_config_dir aux_build_dir aux_install_dir
-        echo "aux_source_dir=${aux_source_dir}" >> $GITHUB_ENV
-        echo "aux_config_dir=${aux_config_dir}" >> $GITHUB_ENV
-        echo "aux_build_dir=${aux_build_dir}" >> $GITHUB_ENV
-        echo "aux_install_dir=${aux_install_dir}" >> $GITHUB_ENV
+        if [ "${{ env.auxiliaryName }}" != '' ]; then
+          aux_source_dir=$gh_workspace_mix/$auxiliaryDir/$auxiliaryName
+          aux_build_dir=$gh_workspace_mix/$auxiliaryDir/build
+          aux_build_dir=$aux_source_dir
+          aux_install_dir=$gh_workspace_mix/install
+
+          outputs aux_source_dir aux_build_dir aux_install_dir
+          echo "aux_source_dir=${aux_source_dir}" >> $GITHUB_ENV
+          echo "aux_build_dir=${aux_build_dir}" >> $GITHUB_ENV
+          echo "aux_install_dir=${aux_install_dir}" >> $GITHUB_ENV
+        fi
 
         # toolchain
         CC='${{ matrix.job.target }}-gcc'
@@ -178,28 +172,25 @@ jobs:
         outputs CC CXX
         echo "CC=${CC}" >> $GITHUB_ENV
         echo "CXX=${CXX}" >> $GITHUB_ENV
-
-    - name: S160 - Create all needed build/work directories
+    - name: S230 - Create workflow directories
       shell: msys2 {0}
       run: |
         ## Create build/work space
-        mkdir -p .local
-
-    - name: S170 - Install/setup prerequisites
+        [ -z $primaryDir ] || mkdir -p $primaryDir
+        [ -z $auxiliaryDir ] || mkdir -p $auxiliaryDir
+        pwd && ls
+    - name: S240 - Install workflow prerequisites
       shell: msys2 {0}
       run: |
         ## Install/setup prerequisites
-      env:
-       MSYS_NO_PATHCONV:
-       MSYS: winsymlinks:native
 
-    - name: S180 - Find cross toolchain
+    - name: S250 - Find cross toolchain
       uses: oprypin/find-latest-tag@v1
       with:
         repository: '${{ github.repository_owner }}/crosstool-ng-msys2-builds'
         releases-only: true
       id: toolchain-find-latest-tag
-    - name: S182 - Download cross toolchain
+    - name: S251 - Download cross toolchain
       uses: robinraju/release-downloader@v1
       with:
         repository: '${{ github.repository_owner }}/crosstool-ng-msys2-builds'
@@ -209,7 +200,7 @@ jobs:
         tarBall: false
         zipBall: false
         #token: ${{ secrets.GITHUB_TOKEN }}
-    - name: S184 - Extract cross toolchain
+    - name: S252 - Extract cross toolchain
       shell: msys2 {0}
       run: |
         mkdir -p .local
@@ -222,22 +213,26 @@ jobs:
       env:
         MSYS_NO_PATHCONV:
         MSYS: winsymlinks:native
-    - name: S186 - Update PATH for cross toolchain
+    - name: S260 - Update environment variables
       shell: msys2 {0}
-      run: echo "$GITHUB_WORKSPACE/.local/bin" >> "$GITHUB_PATH"
+      run: |
+        echo "$GITHUB_WORKSPACE/.local/bin" >> "$GITHUB_PATH"
+    - name: S261 - Inspect environment variables
+      shell: msys2 {0}
+      run: env
 
-    - name: S210 - Extract primary source
+    - name: S330 - Extract primary source tarball
       shell: msys2 {0}
       continue-on-error: false
       run: |
         tar -xvf ${{ env.primaryName }}-source.tar
-    - name: S220 - Extract auxiliary source
+    - name: S331 - Extract auxiliary source tarball
       shell: msys2 {0}
       continue-on-error: false
       run: |
         tar -xvf ${{ env.auxiliaryName }}-source.tar
 
-    - name: S340 - Info
+    - name: S400 - Show workflow information
       shell: msys2 {0}
       run: |
         ## Info
@@ -252,9 +247,11 @@ jobs:
         which $CC >/dev/null 2>&1 && ($CC --version | head -1) || true
         which $CXX >/dev/null 2>&1 && ($CXX --version | head -1) || true
 
-    - name: S400 - Build ${{ env.primaryName }}
+    - name: S500 - Build workflow targets
+      if: ${{ env.primaryName != '' }}
       shell: msys2 {0}
       run: |
+        config_dir=`realpath --relative-to=$build_dir $source_dir`
         echo "## source_dir=$source_dir"
         echo "## build_dir=$build_dir"
         echo "## install_dir=$install_dir"
@@ -288,9 +285,11 @@ jobs:
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
-    - name: S401 - Build ${{ env.auxiliaryName }}
+    - name: S510 - Build workflow targets
+      if: ${{ env.auxiliaryName != '' }}
       shell: msys2 {0}
       run: |
+        aux_config_dir=`realpath --relative-to=$aux_build_dir $aux_source_dir`
         echo "## aux_source_dir=$aux_source_dir"
         echo "## aux_build_dir=$aux_build_dir"
         echo "## aux_install_dir=$aux_install_dir"
@@ -321,13 +320,14 @@ jobs:
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
-    - name: S410 - Test
+
+    - name: S600 - Test workflow targets
       if: matrix.job.skip-tests != true
       shell: msys2 {0}
       run: |
         ## Test
 
-    - name: S500 - Archive executable artifacts / stress-${{ steps.versions.outputs.target_arch }}
+    - name: S700 - Archive build artifacts
       shell: msys2 {0}
       run: |
         ## Archive artifacts
@@ -335,7 +335,7 @@ jobs:
             -czf $gh_workspace_nix/stress-${{ steps.versions.outputs.target_arch }}.tar.gz \
             stress-${{ steps.versions.outputs.target_arch }} \
             || true
-    - name: S510 - Archive buildlog artifacts
+    - name: S710 - Archive log artifacts
       shell: msys2 {0}
       run: |
         ## Archive artifacts
@@ -344,13 +344,13 @@ jobs:
             $build_dir/*.log $aux_build_dir/*.log \
             || true
       if: ${{ always() }}
-    - name: S520 - Upload executable artifacts / stress-${{ steps.versions.outputs.target_arch }}
+    - name: S800 - Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: stress-${{ steps.versions.outputs.target_arch }}.tar.gz
         path: |
           stress-${{ steps.versions.outputs.target_arch }}.tar.gz
-    - name: S530 - Upload log artifacts
+    - name: S810 - Upload log artifacts
       uses: actions/upload-artifact@v4
       with:
         name: stress-${{ steps.versions.outputs.target_arch }}-buildlog.tar.gz

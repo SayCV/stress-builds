@@ -18,6 +18,7 @@
             "branch": "master",
             "commit": "c7e1a098ab0672117b1904cf435d52489558bf95",
             "sparse": ""
-        }
+        },
+        "inter_ver_file": "inter_ver_file.txt"
     }
 ]

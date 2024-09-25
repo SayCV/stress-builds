@@ -84,49 +84,49 @@ jobs:
       auxiliaryRepo:     ${{ matrix.config.auxiliary_repo.repo_host }}/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryApiRepo:  ${{ matrix.config.auxiliary_repo.repo_host }}/api/v1/repos/${{ matrix.config.auxiliary_repo.repo_user }}/${{ matrix.config.auxiliary_repo.repo_name }}
       auxiliaryDir:      ${{ matrix.config.auxiliary_repo.name }}_${{ matrix.config.auxiliary_repo.commit }}
-    outputs:
-      arch:   ${{ steps.parse-build-pkgs-versions.outputs.arch }}
-      releaseTag: ${{ steps.parse-build-pkgs-versions.outputs.releaseTag }}
+      auxiliaryPAT:      ${{ secrets.GITEA_PAT }}
+      inter_ver_file:            ${{ matrix.config.inter_ver_file }}
     permissions:
       contents: write
     steps:
-    - name: S900 - Download artifacts
+    - name: S100 - Download workflow artifacts
       uses: actions/download-artifact@v4
       with:
         merge-multiple: true
-    - name: S910 - Display structure of downloaded files
+    - name: S101 - Display downloaded files
       run: |
         ls -R
-
-    - name: S920 - Parse build-pkgs-versions
-      id: parse-build-pkgs-versions
+    - name: S120 - Parse workflow versions
+      id: parse-workflow-versions
       run: |
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        source build-pkgs-versions.txt
+
+        [ -z $inter_ver_file ] || inter_ver_file="inter_ver_file.txt"
+        source $inter_ver_file
         target_arch=$target_arch
         primaryVer=$primaryVer
         auxiliaryVer=$auxiliaryVer
         releaseTag=v$primaryVer-$auxiliaryVer
         outputs releaseTag primaryVer auxiliaryVer target_arch
 
-        echo "$primaryName $primaryVer"      > ${{ github.workspace }}-VERSIONS.txt
-        echo "$auxiliaryName $auxiliaryVer" >> ${{ github.workspace }}-VERSIONS.txt
+        echo "$primaryName $primaryVer"      > ${{ github.workspace }}-release-readme.txt
+        ##echo "$auxiliaryName $auxiliaryVer" >> ${{ github.workspace }}-release-readme.txt
 
-    - name: S930 - Generate Hashes
+    - name: S900 - Generate release hashes
       run: |
         echo "md5sum	"`md5sum -t $hash_file`         > $hash_file.hash
         echo "sha1sum	"`sha1sum -t $hash_file`       >> $hash_file.hash
         echo "sha256sum	"`sha256sum -t $hash_file`   >> $hash_file.hash
         echo "sha512sum 	"`sha512sum -t $hash_file` >> $hash_file.hash
       env:
-        hash_file: stress-${{ steps.parse-build-pkgs-versions.outputs.target_arch }}.tar.gz
+        hash_file: stress-${{ steps.parse-workflow-versions.outputs.target_arch }}.tar.gz
 
-    - name: S940 - Upload to Release
+    - name: S910 - Upload to release
       id: upload_to_release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.parse-build-pkgs-versions.outputs.releaseTag }}
-        body_path: ${{ github.workspace }}-VERSIONS.txt
+        tag_name: ${{ steps.parse-workflow-versions.outputs.releaseTag }}
+        body_path: ${{ github.workspace }}-release-readme.txt
         files: |
           *.tar.gz
           *.hash
