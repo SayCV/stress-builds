@@ -247,7 +247,7 @@ jobs:
         which $CC >/dev/null 2>&1 && ($CC --version | head -1) || true
         which $CXX >/dev/null 2>&1 && ($CXX --version | head -1) || true
 
-    - name: S500 - Build workflow targets
+    - name: S500 - Build primary targets
       if: ${{ env.primaryName != '' }}
       shell: msys2 {0}
       run: |
@@ -285,7 +285,7 @@ jobs:
       env:
        MSYS_NO_PATHCONV:
        MSYS: winsymlinks:native
-    - name: S510 - Build workflow targets
+    - name: S510 - Build auxiliary targets
       if: ${{ env.auxiliaryName != '' }}
       shell: msys2 {0}
       run: |
