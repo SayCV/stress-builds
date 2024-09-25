@@ -47,11 +47,13 @@ jobs:
       auxiliaryPAT:      ${{ secrets.GITEA_PAT }}
       inter_ver_file:            ${{ matrix.config.inter_ver_file }}
     steps:
-    - name: S100 - Download workflow artifacts
+    - name: S100 - Checkout workflow repository
+      uses: actions/checkout@v4
+    - name: S110 - Download workflow artifacts
       uses: actions/download-artifact@v4
       with:
         merge-multiple: true
-    - name: S110 - Install msys2 environments
+    - name: S120 - Install msys2 environments
       if: ${{ always() }}
       uses: msys2/setup-msys2@v2
       with:
@@ -61,7 +63,7 @@ jobs:
           base-devel msys2-runtime-devel autotools intltool libtool gcc bison flex gperf help2man meson ninja texinfo patch unzip
           autoconf-archive gettext-devel ncurses-devel rsync
         path-type: inherit
-    - name: S120 - Parse workflow versions
+    - name: S130 - Parse workflow versions
       id: versions
       shell: msys2 {0}
       run: |
@@ -176,8 +178,12 @@ jobs:
       shell: msys2 {0}
       run: |
         ## Create build/work space
-        [ -z $primaryDir ] || mkdir -p $primaryDir
-        [ -z $auxiliaryDir ] || mkdir -p $auxiliaryDir
+        [ -z $primaryDir ]      || mkdir -p $primaryDir
+        [ -z $auxiliaryDir ]    || mkdir -p $auxiliaryDir
+        [ -e $build_dir ]       || mkdir -p $build_dir
+        [ -e $aux_build_dir ]   || mkdir -p $aux_build_dir
+        [ -e $install_dir ]     || mkdir -p $install_dir
+        [ -e $aux_install_dir ] || mkdir -p $aux_install_dir
         pwd && ls
     - name: S240 - Install workflow prerequisites
       shell: msys2 {0}
@@ -256,8 +262,6 @@ jobs:
         echo "## build_dir=$build_dir"
         echo "## install_dir=$install_dir"
         echo "## config_dir=$config_dir"
-        mkdir -p $build_dir
-        mkdir -p $install_dir
 
         cd $source_dir
         echo "## Bootstraping ..."
@@ -294,8 +298,6 @@ jobs:
         echo "## aux_build_dir=$aux_build_dir"
         echo "## aux_install_dir=$aux_install_dir"
         echo "## aux_config_dir=$aux_config_dir"
-        mkdir -p $aux_build_dir
-        mkdir -p $aux_install_dir
 
         cd $aux_source_dir
         echo "## Bootstraping ..."
